@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SVGEXIF | Client-Side Image Intelligence</title>
+  <style>
+    :root {
+      --bg: #060907;
+      --panel: rgba(14, 22, 18, 0.72);
+      --panel-border: rgba(90, 255, 157, 0.22);
+      --text: #d9ffe5;
+      --muted: #8fb9a0;
+      --accent: #49ff9f;
+      --accent-dim: #1bc46f;
+      --cyan: #66d8ff;
+      --danger: #ff7f7f;
+      --shadow: 0 0 0 1px rgba(90, 255, 157, 0.16), 0 16px 40px rgba(0, 0, 0, 0.45), 0 0 30px rgba(73, 255, 159, 0.08);
+      --radius: 16px;
+      --radius-sm: 10px;
+      --mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --sans: "Inter", "Segoe UI", Roboto, system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--sans);
+      color: var(--text);
+      background:
+        radial-gradient(circle at 20% -10%, rgba(73, 255, 159, 0.14), transparent 38%),
+        radial-gradient(circle at 95% 5%, rgba(102, 216, 255, 0.12), transparent 32%),
+        repeating-linear-gradient(transparent 0 2px, rgba(255, 255, 255, 0.02) 2px 3px),
+        linear-gradient(180deg, #070b09, #040605 60%, #060706);
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(rgba(102, 216, 255, 0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(102, 216, 255, 0.05) 1px, transparent 1px);
+      background-size: 44px 44px;
+      opacity: 0.16;
+    }
+
+    .app { max-width: 1160px; margin: 0 auto; padding: 18px 18px 34px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .topbar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+    }
+
+    .brand { display: flex; flex-direction: column; gap: 2px; }
+    .brand h1 {
+      margin: 0;
+      font-size: 1rem;
+      letter-spacing: 0.09em;
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .brand p { margin: 0; font-size: 0.72rem; color: var(--muted); letter-spacing: 0.09em; }
+    .status-group { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .badge {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      border: 1px solid rgba(102, 216, 255, 0.35);
+      color: var(--cyan);
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: rgba(13, 23, 28, 0.7);
+    }
+    .badge.online {
+      border-color: rgba(73, 255, 159, 0.38);
+      color: var(--accent);
+    }
+
+    .hero {
+      margin-top: 14px;
+      padding: 26px 20px;
+    }
+    .hero h2 {
+      margin: 0;
+      font-size: clamp(1.65rem, 3vw, 2.45rem);
+      line-height: 1.15;
+    }
+    .hero p {
+      margin: 12px 0 0;
+      max-width: 760px;
+      color: var(--muted);
+    }
+    .terminal-line {
+      margin-top: 16px;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      color: var(--cyan);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .terminal-line::after {
+      content: "";
+      width: 8px;
+      height: 1em;
+      background: var(--accent);
+      animation: blink 1s steps(1) infinite;
+    }
+
+    .grid {
+      margin-top: 14px;
+      display: grid;
+      gap: 14px;
+      grid-template-columns: 1.1fr 0.9fr;
+    }
+    .column { display: grid; gap: 14px; align-content: start; }
+
+    .upload {
+      position: relative;
+      padding: 24px 16px;
+      border: 1px dashed rgba(73, 255, 159, 0.42);
+      border-radius: var(--radius-sm);
+      text-align: center;
+      transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+      background: linear-gradient(180deg, rgba(12, 17, 14, 0.8), rgba(10, 14, 12, 0.45));
+      overflow: hidden;
+    }
+    .upload::before {
+      content: "";
+      position: absolute;
+      top: -120%;
+      left: -20%;
+      width: 140%;
+      height: 220%;
+      background: linear-gradient(180deg, transparent, rgba(73, 255, 159, 0.11), transparent);
+      transform: rotate(14deg);
+      animation: scan 4.2s linear infinite;
+      pointer-events: none;
+    }
+    .upload.drag-over {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(73, 255, 159, 0.23), 0 0 36px rgba(73, 255, 159, 0.22);
+      transform: translateY(-1px);
+    }
+    .upload h3 {
+      margin: 0;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      font-size: 1.08rem;
+    }
+    .upload p { margin: 8px 0 0; color: var(--muted); }
+    .upload small {
+      display: block;
+      margin-top: 10px;
+      color: var(--cyan);
+      font-family: var(--mono);
+    }
+    .upload-icon {
+      font-size: 1.6rem;
+      display: inline-block;
+      margin-bottom: 10px;
+      color: var(--cyan);
+      filter: drop-shadow(0 0 12px rgba(102, 216, 255, 0.22));
+    }
+
+    .controls {
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    button {
+      border: 1px solid rgba(73, 255, 159, 0.4);
+      background: rgba(8, 15, 11, 0.9);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 13px;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: box-shadow .2s ease, border-color .2s ease, transform .2s ease;
+    }
+    button:hover { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(73, 255, 159, 0.3), 0 0 18px rgba(73, 255, 159, 0.17); }
+    button:active { transform: translateY(1px); }
+    button[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+    :focus-visible {
+      outline: 2px solid var(--cyan);
+      outline-offset: 2px;
+    }
+
+    .state-line {
+      margin-top: 10px;
+      font-family: var(--mono);
+      color: var(--cyan);
+      font-size: 0.78rem;
+    }
+    .state-line.warn { color: #ffd79d; }
+    .state-line.error { color: var(--danger); }
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(102, 216, 255, 0.25);
+      border-top-color: var(--cyan);
+      border-radius: 50%;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 8px;
+      animation: spin .8s linear infinite;
+    }
+
+    .empty {
+      margin-top: 12px;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .empty .cursor {
+      display: inline-block;
+      width: 9px;
+      height: 1em;
+      background: var(--accent);
+      margin-left: 4px;
+      animation: blink .9s steps(1) infinite;
+    }
+
+    .section {
+      padding: 14px;
+    }
+    .section h3 {
+      margin: 0 0 10px;
+      font-size: 0.85rem;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+    }
+    .kv {
+      margin: 0;
+      display: grid;
+      grid-template-columns: minmax(100px, 150px) 1fr;
+      gap: 6px 10px;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+    }
+    .kv dt { color: var(--muted); }
+    .kv dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+
+    .preview-wrap img {
+      width: 100%;
+      max-height: 280px;
+      object-fit: contain;
+      border-radius: 10px;
+      border: 1px solid rgba(102, 216, 255, 0.2);
+      background: #040705;
+    }
+    .info-mini {
+      margin-top: 8px;
+      font-family: var(--mono);
+      color: var(--muted);
+      font-size: 0.74rem;
+      display: grid;
+      gap: 4px;
+    }
+
+    details {
+      border-top: 1px solid rgba(102, 216, 255, 0.2);
+      margin-top: 10px;
+      padding-top: 10px;
+    }
+    summary {
+      cursor: pointer;
+      color: var(--cyan);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+    }
+    .terminal {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 10px;
+      background: rgba(3, 8, 6, 0.95);
+      border: 1px solid rgba(73, 255, 159, 0.18);
+      font-family: var(--mono);
+      font-size: 0.74rem;
+      color: #bcffda;
+      white-space: pre;
+      overflow: auto;
+      max-height: 360px;
+    }
+
+    .privacy strong {
+      display: block;
+      color: var(--accent);
+      margin-bottom: 8px;
+      letter-spacing: 0.06em;
+    }
+    .privacy p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .privacy .local {
+      margin-top: 10px;
+      color: var(--cyan);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+    }
+
+    .hidden { display: none !important; }
+    .success-pulse { animation: pulse 1.2s ease; }
+
+    @media (max-width: 920px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      .app { padding: 12px; }
+      .topbar { flex-direction: column; align-items: flex-start; }
+      .hero { padding: 22px 14px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+
+    @keyframes blink { 50% { opacity: 0; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes scan {
+      0% { transform: translateY(-40%) rotate(14deg); opacity: 0; }
+      25% { opacity: 1; }
+      100% { transform: translateY(55%) rotate(14deg); opacity: 0; }
+    }
+    @keyframes pulse {
+      0% { box-shadow: var(--shadow); }
+      40% { box-shadow: var(--shadow), 0 0 28px rgba(73, 255, 159, 0.22); }
+      100% { box-shadow: var(--shadow); }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="panel topbar">
+      <div class="brand">
+        <h1>SVGEXIF</h1>
+        <p>CLIENT-SIDE IMAGE INTELLIGENCE</p>
+      </div>
+      <div class="status-group">
+        <span class="badge online">● SYSTEM ONLINE</span>
+        <span class="badge">LOCAL PROCESSING</span>
+      </div>
+    </header>
+
+    <section class="panel hero">
+      <h2>Reveal What Your Images Remember.</h2>
+      <p>Inspect hidden EXIF and image metadata directly in your browser. Your files never leave your device.</p>
+      <div class="terminal-line">&gt; INITIALIZING METADATA ANALYZER...</div>
+    </section>
+
+    <main class="grid">
+      <section class="panel section">
+        <div id="dropZone" class="upload" role="button" tabindex="0" aria-label="Drop image here or click to browse">
+          <div class="upload-icon" aria-hidden="true">🖼️</div>
+          <h3>DROP IMAGE HERE</h3>
+          <p>or click to browse</p>
+          <small>JPEG • PNG • HEIC</small>
+          <input id="fileInput" class="hidden" type="file" accept=".jpg,.jpeg,.png,.heic,.heif,image/jpeg,image/png,image/heic,image/heif">
+        </div>
+
+        <div class="controls">
+          <button id="selectBtn" type="button">[ SELECT IMAGE ]</button>
+          <button id="clearBtn" type="button" disabled>[ CLEAR / RESET ]</button>
+          <button id="copyBtn" type="button" disabled>[ COPY JSON ]</button>
+          <button id="downloadBtn" type="button" disabled>[ DOWNLOAD JSON ]</button>
+        </div>
+        <div id="stateLine" class="state-line">SYSTEM READY</div>
+        <div id="emptyState" class="empty">AWAITING INPUT...<span class="cursor" aria-hidden="true"></span></div>
+      </section>
+
+      <aside class="column">
+        <section class="panel section">
+          <h3>TARGET IMAGE</h3>
+          <div id="previewWrap" class="preview-wrap hidden">
+            <img id="previewImage" alt="Selected image preview">
+            <div id="previewInfo" class="info-mini"></div>
+          </div>
+          <div id="noPreview" class="state-line">No image selected.</div>
+        </section>
+
+        <section class="panel section privacy">
+          <strong>YOUR DATA STAYS LOCAL</strong>
+          <p>This tool processes images entirely inside your browser. No images, EXIF data, GPS coordinates, or metadata are uploaded to a server.</p>
+          <div class="local">LOCAL ONLY ✓</div>
+        </section>
+      </aside>
+    </main>
+
+    <section id="metadataPanel" class="panel section hidden" aria-live="polite">
+      <h3>METADATA DASHBOARD</h3>
+      <div id="metadataContent"></div>
+      <details id="rawSection">
+        <summary>RAW METADATA</summary>
+        <pre id="rawOutput" class="terminal"></pre>
+      </details>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const dropZone = document.getElementById("dropZone");
+    const stateLine = document.getElementById("stateLine");
+    const emptyState = document.getElementById("emptyState");
+    const metadataPanel = document.getElementById("metadataPanel");
+    const metadataContent = document.getElementById("metadataContent");
+    const rawOutput = document.getElementById("rawOutput");
+    const previewWrap = document.getElementById("previewWrap");
+    const previewImage = document.getElementById("previewImage");
+    const previewInfo = document.getElementById("previewInfo");
+    const noPreview = document.getElementById("noPreview");
+    const clearBtn = document.getElementById("clearBtn");
+    const selectBtn = document.getElementById("selectBtn");
+    const copyBtn = document.getElementById("copyBtn");
+    const downloadBtn = document.getElementById("downloadBtn");
+
+    const supportedMime = new Set(["image/jpeg", "image/png", "image/heic", "image/heif"]);
+    const supportedExt = [".jpg", ".jpeg", ".png", ".heic", ".heif"];
+    let currentFile = null;
+    let currentObjectUrl = null;
+    let currentMeta = null;
+    let imageDimensions = null;
+
+    const bytes = (value) => {
+      if (!Number.isFinite(value) || value < 0) return "Unknown";
+      const units = ["B", "KB", "MB", "GB"];
+      let size = value;
+      let unit = 0;
+      while (size >= 1024 && unit < units.length - 1) {
+        size /= 1024;
+        unit++;
+      }
+      return `${size.toFixed(size < 10 && unit > 0 ? 2 : 1)} ${units[unit]}`;
+    };
+
+    const safe = (value) => {
+      if (value === undefined || value === null || value === "") return null;
+      if (value instanceof Date) return value.toLocaleString();
+      if (typeof value === "number" && !Number.isFinite(value)) return null;
+      return String(value);
+    };
+
+    const gpsValue = (value) => {
+      if (value === undefined || value === null) return null;
+      if (Array.isArray(value)) return value.map((v) => Number(v).toFixed(6)).join(", ");
+      const n = Number(value);
+      return Number.isFinite(n) ? n.toFixed(6) : String(value);
+    };
+
+    const createObjectUrl = (file) => {
+      if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+      currentObjectUrl = URL.createObjectURL(file);
+      return currentObjectUrl;
+    };
+
+    const resetUI = () => {
+      currentFile = null;
+      currentMeta = null;
+      imageDimensions = null;
+      metadataPanel.classList.add("hidden");
+      metadataContent.innerHTML = "";
+      rawOutput.textContent = "";
+      emptyState.classList.remove("hidden");
+      previewWrap.classList.add("hidden");
+      noPreview.classList.remove("hidden");
+      previewImage.removeAttribute("src");
+      previewInfo.innerHTML = "";
+      setState("SYSTEM READY", "info");
+      clearBtn.disabled = true;
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+      if (currentObjectUrl) {
+        URL.revokeObjectURL(currentObjectUrl);
+        currentObjectUrl = null;
+      }
+      fileInput.value = "";
+    };
+
+    const setState = (message, mode) => {
+      stateLine.className = "state-line";
+      if (mode === "warn") stateLine.classList.add("warn");
+      if (mode === "error") stateLine.classList.add("error");
+      stateLine.innerHTML = message;
+    };
+
+    const isSupported = (file) => {
+      const lower = file.name.toLowerCase();
+      return supportedMime.has(file.type) || supportedExt.some((ext) => lower.endsWith(ext));
+    };
+
+    const loadImageDimensions = (url) => new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
+
+    const renderSection = (title, pairs) => {
+      const entries = pairs.filter(([, v]) => safe(v) !== null);
+      if (!entries.length) return "";
+      return `<section class="section panel" style="margin-top:10px;padding:12px;">
+        <h3>${title}</h3>
+        <dl class="kv">${entries.map(([k, v]) => `<dt>${k}</dt><dd>${safe(v)}</dd>`).join("")}</dl>
+      </section>`;
+    };
+
+    const renderMetadata = (meta) => {
+      const usedKeys = new Set([
+        "Make", "Model", "LensModel", "Lens", "FocalLength", "FNumber", "ISO", "ExposureTime",
+        "DateTimeOriginal", "ModifyDate", "CreateDate", "DateTimeDigitized",
+        "ColorSpace", "Orientation", "XResolution", "YResolution", "ImageWidth", "ImageHeight",
+        "PixelXDimension", "PixelYDimension", "latitude", "longitude", "altitude", "GPSLatitude", "GPSLongitude",
+        "GPSAltitude", "GPSInfo"
+      ]);
+
+      const fileSection = renderSection("FILE", [
+        ["Filename", currentFile.name],
+        ["File size", bytes(currentFile.size)],
+        ["MIME type", currentFile.type || "Unknown"]
+      ]);
+      const imageSection = renderSection("IMAGE", [
+        ["Width", meta.ImageWidth || meta.PixelXDimension || imageDimensions?.width],
+        ["Height", meta.ImageHeight || meta.PixelYDimension || imageDimensions?.height],
+        ["Color space", meta.ColorSpace],
+        ["Orientation", meta.Orientation],
+        ["Resolution", meta.XResolution && meta.YResolution ? `${meta.XResolution} × ${meta.YResolution}` : null]
+      ]);
+      const cameraSection = renderSection("CAMERA", [
+        ["Make", meta.Make],
+        ["Model", meta.Model],
+        ["Lens", meta.LensModel || meta.Lens],
+        ["Focal length", meta.FocalLength ? `${meta.FocalLength} mm` : null],
+        ["Aperture", meta.FNumber ? `f/${meta.FNumber}` : null],
+        ["ISO", meta.ISO],
+        ["Shutter speed", meta.ExposureTime ? `${meta.ExposureTime}s` : null]
+      ]);
+      const dateSection = renderSection("DATE & TIME", [
+        ["Date taken", meta.DateTimeOriginal],
+        ["Date modified", meta.ModifyDate],
+        ["Original date", meta.CreateDate || meta.DateTimeDigitized]
+      ]);
+      const locationSection = renderSection("LOCATION", [
+        ["Latitude", gpsValue(meta.latitude || meta.GPSLatitude)],
+        ["Longitude", gpsValue(meta.longitude || meta.GPSLongitude)],
+        ["Altitude", safe(meta.altitude || meta.GPSAltitude)],
+        ["GPS information", safe(meta.GPSInfo)]
+      ]);
+
+      const other = Object.keys(meta)
+        .filter((key) => !usedKeys.has(key))
+        .sort((a, b) => a.localeCompare(b))
+        .map((key) => [key, meta[key]]);
+      const otherSection = renderSection("OTHER", other);
+
+      metadataContent.innerHTML = fileSection + imageSection + cameraSection + dateSection + locationSection + otherSection;
+
+      const json = JSON.stringify(meta, null, 2);
+      rawOutput.textContent = `$ exif.scan(image)\n$ status: complete\n\n${json}`;
+      copyBtn.disabled = false;
+      downloadBtn.disabled = false;
+      metadataPanel.classList.remove("hidden");
+      metadataPanel.classList.add("success-pulse");
+      setTimeout(() => metadataPanel.classList.remove("success-pulse"), 1300);
+    };
+
+    const showPreview = async (file) => {
+      const url = createObjectUrl(file);
+      previewImage.src = url;
+      previewWrap.classList.remove("hidden");
+      noPreview.classList.add("hidden");
+      imageDimensions = await loadImageDimensions(url);
+      previewInfo.innerHTML = `
+        <div>NAME: ${file.name}</div>
+        <div>TYPE: ${file.type || "unknown"}</div>
+        <div>SIZE: ${bytes(file.size)}</div>
+        <div>DIMENSIONS: ${imageDimensions ? `${imageDimensions.width} × ${imageDimensions.height}` : "unknown"}</div>
+      `;
+    };
+
+    const handleFile = async (file) => {
+      if (!file) return;
+      if (!isSupported(file)) {
+        resetUI();
+        setState("UNSUPPORTED FILE TYPE. Please use JPEG, PNG, or HEIC.", "error");
+        return;
+      }
+      currentFile = file;
+      clearBtn.disabled = false;
+      emptyState.classList.add("hidden");
+      await showPreview(file);
+      setState('<span class="spinner" aria-hidden="true"></span>SCANNING METADATA...', "info");
+
+      try {
+        const parsed = await exifr.parse(file);
+        const metadata = parsed && typeof parsed === "object" ? parsed : {};
+        currentMeta = metadata;
+        if (!Object.keys(metadata).length) {
+          metadataPanel.classList.add("hidden");
+          copyBtn.disabled = true;
+          downloadBtn.disabled = true;
+          setState("NO METADATA DETECTED. The image does not contain readable EXIF metadata. It may have been stripped during editing, compression, or social-media processing.", "warn");
+          return;
+        }
+        renderMetadata(metadata);
+        setState("METADATA EXTRACTION COMPLETE ✓", "info");
+      } catch {
+        metadataPanel.classList.add("hidden");
+        copyBtn.disabled = true;
+        downloadBtn.disabled = true;
+        setState("PROCESSING FAILED. The image may be corrupted or unsupported by your browser.", "error");
+      }
+    };
+
+    const onDrop = (event) => {
+      event.preventDefault();
+      dropZone.classList.remove("drag-over");
+      const [file] = event.dataTransfer.files || [];
+      handleFile(file);
+    };
+
+    selectBtn.addEventListener("click", () => fileInput.click());
+    clearBtn.addEventListener("click", resetUI);
+    dropZone.addEventListener("click", () => fileInput.click());
+    dropZone.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        fileInput.click();
+      }
+    });
+    fileInput.addEventListener("change", (event) => handleFile(event.target.files[0]));
+
+    ["dragenter", "dragover"].forEach((eventName) => {
+      dropZone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        dropZone.classList.add("drag-over");
+      });
+    });
+    ["dragleave", "dragend"].forEach((eventName) => {
+      dropZone.addEventListener(eventName, () => dropZone.classList.remove("drag-over"));
+    });
+    dropZone.addEventListener("drop", onDrop);
+
+    copyBtn.addEventListener("click", async () => {
+      if (!currentMeta) return;
+      const original = copyBtn.textContent;
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(currentMeta, null, 2));
+        copyBtn.textContent = "[ COPIED ✓ ]";
+        setTimeout(() => { copyBtn.textContent = original; }, 1200);
+      } catch {
+        setState("COPY FAILED. Clipboard access may be blocked by browser settings.", "warn");
+      }
+    });
+
+    downloadBtn.addEventListener("click", () => {
+      if (!currentMeta || !currentFile) return;
+      try {
+        const blob = new Blob([JSON.stringify(currentMeta, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${currentFile.name.replace(/\.[^.]+$/, "") || "metadata"}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch {
+        setState("DOWNLOAD FAILED. Browser blocked file generation.", "warn");
+      }
+    });
+
+    window.addEventListener("beforeunload", () => {
+      if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+    });
+  </script>
+</body>
+</html>
