@@ -248,12 +248,13 @@
     .kv {
       margin: 0;
       display: grid;
-      grid-template-columns: minmax(100px, 150px) 1fr;
-      gap: 6px 10px;
+      grid-template-columns: minmax(max-content, 180px) minmax(0, 1fr);
+      row-gap: 6px;
+      column-gap: 18px;
       font-family: var(--mono);
       font-size: 0.8rem;
     }
-    .kv dt { color: var(--muted); }
+    .kv dt { color: var(--muted); white-space: nowrap; }
     .kv dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
 
     .preview-wrap img {
